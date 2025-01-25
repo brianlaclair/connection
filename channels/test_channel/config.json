@@ -1,0 +1,10 @@
+{
+    "name": "Test Channel", 
+    "description": "This channel is for testing that auto-loading is operating properly",
+    "entrypoint": "main.js",
+    "enabled": true,
+    "type": "polling",
+    "polling": {
+        "interval": 1000
+    }
+}

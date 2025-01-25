@@ -1,0 +1,27 @@
+{
+  "name": "connection",
+  "version": "1.0.0",
+  "description": "a free and open source healthcare integration engine",
+  "keywords": [
+    "integration"
+  ],
+  "homepage": "https://github.com/brianlaclair/connection#readme",
+  "bugs": {
+    "url": "https://github.com/brianlaclair/connection/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/brianlaclair/connection.git"
+  },
+  "license": "MIT",
+  "author": "Brian LaClair",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2"
+  }
+}
