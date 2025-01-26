@@ -4,6 +4,7 @@
 
 import fs from 'node:fs/promises';
 import { createHash } from 'node:crypto';
+import { exec } from 'node:child_process';
 
 class autoload {
     path;
@@ -25,6 +26,7 @@ class autoload {
                             let checksum = createHash('sha1').update(data).digest('base64');
                             let item = {
                                 name: file,
+                                controlId: null,
                                 checksum: checksum,
                                 config: JSON.parse(data)
                             };
@@ -42,6 +44,8 @@ class autoload {
                             }
     
                             if (!exists) {
+                                // Create the process
+                                item.controlId = this.register(item);
                                 console.log(`Loaded ${item.config.name ?? file}`);
                                 this.list.push(item);
                             }
@@ -67,6 +71,29 @@ class autoload {
             .catch(error => {
                 console.error(error);
             });
+    }
+
+    register (item) {
+        var id = null;
+
+        switch (item.config.type) {
+            case 'polling':
+                let interval = item.config.polling.interval;
+                let entry    = this.path + '/' + item.name + '/' + item.config.entrypoint;
+                id = setInterval(() => {
+                        exec(`node ${entry}`, (error, stdout, stderr) => {
+                            if (error) {
+                                console.log(stderr);
+                            }
+                            console.log(stdout);
+                        });
+                    }, interval);
+                break;
+            default:
+                console.error(`Error while registering channel ${item.config.name ?? item.name}\n\t${item.config.type} is not a valid channel type`);
+        }
+
+        return id;
     }
 }
 
