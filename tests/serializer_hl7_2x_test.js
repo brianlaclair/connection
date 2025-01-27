@@ -9,15 +9,15 @@ PV1|1|I|2000^2012^01||||004777^ATTEND^AARON^A|||SUR||||ADM|A0|`;
 
 const message = new hl7(input);
 
-//console.log(JSON.stringify(message.message));
-
 // Does the serialized version match the original input?
-asserts.deepStrictEqual(message.getSerialized(), input);
+asserts.deepStrictEqual(message.serialize(), input);
 
 // We can successfully read a discrete value
 asserts.deepStrictEqual(message.getValue("PID.5.1"), "EVERYMAN");
 
 // We can change a value
 message.setValue("PID.5.1", "LACLAIR");
-console.log(message.getSerialized());
-// asserts.deepStrictEqual(message.getValue("PID.5.1"), "LACLAIR");
+asserts.deepStrictEqual(message.getValue("PID.5.1"), "LACLAIR");
+
+// // message.delete("PID");
+// // asserts.deepStrictEqual(message.getValue("PID"), undefined);

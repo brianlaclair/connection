@@ -7,15 +7,29 @@ class connection {
     output = {
         error: false,
         payload: null,
-        stderr: null
+        log: null
     }
 
-    constructor () {
-        this.output.payload = "Hello from the connection class!";
+    log(message) {
+        if (this.output.log === null) {
+            this.output.log = [];
+        }
+        this.output.log.push(message);
+    }
+
+    error(message) {
+        this.output.error = true;
+        this.log(message)
+        this.return();
+        this.kill();
+    }
+
+    setPayload(payload) {
+        this.output.payload = payload;
     }
 
     return() {
-        console.log(this.output);
+        console.log(JSON.stringify(this.output));
     }
     
 }

@@ -83,9 +83,17 @@ class autoload {
                 id = setInterval(() => {
                         exec(`node ${entry}`, (error, stdout, stderr) => {
                             if (error) {
-                                console.log(stderr);
+                                console.error(stderr);
+                                return;
                             }
-                            console.log(stdout);
+
+                            stdout = JSON.parse(stdout);
+                            
+                            if (stdout.log) {
+                                stdout.log.forEach(log => {
+                                    console.log(log);
+                                });
+                            }
                         });
                     }, interval);
                 break;

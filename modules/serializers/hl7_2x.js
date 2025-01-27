@@ -1,162 +1,142 @@
-// hl7_2x.js
-// =========================
-// A serializer / deserializer for HL7 2.x
-
-class hl7_2x {
-
-    raw     = "";
-    message;
-    error   = false;
-
-    constructor (raw, segment_separator = "\n") {
+class HL7Parser {
+    constructor(raw, segmentSeparator = "\n") {
         this.raw = raw.trim();
+        this.error = false;
 
-        if (this.getValidity()) {
-            this.message = this.deserialize(raw, segment_separator);
+        if (this.isValidMessage(this.raw)) {
+            this.message = this.deserialize(this.raw, segmentSeparator);
         } else {
             this.error = true;
         }
     }
 
-    getValidity(input = this.raw) {
-        // If the first three characters are "MSH"
-        if (input.slice(0, 3) === "MSH") {
-            return true;
-        }
-
-        return false;
+    // Check if the HL7 message is valid
+    isValidMessage(input = this.raw) {
+        return input.startsWith("MSH");
     }
 
-    deserialize (input, segment_separator = "\n") {
-        var item        = {};
-        var order_count = 0;
-        input           = input.trim();
+    // Deserialize HL7 message into an object
+    deserialize(input, segmentSeparator = "\n") {
+        const meta = {
+            fieldSeparator: input[3],
+            componentSeparator: input[4],
+            repetitionSeparator: input[5],
+            escapeCharacter: input[6],
+            subcomponentSeparator: input[7],
+        };
 
-        item.field_seperator         = input[3];
-        item.component_seperator     = input[4];
-        item.repetition_seperator    = input[5];
-        item.escape_character        = input[6];
-        item.subcomponent_separator  = input[7];
+        const segments = input.split(segmentSeparator).map((segment, order) => {
+            const fields = segment.split(meta.fieldSeparator);
+            const segmentType = fields[0].toUpperCase();
 
-        input = input.split(segment_separator);
-
-        input.forEach(segment => {
-            let fields = segment.split(item.field_seperator);
-            let segment_type = fields[0].toUpperCase();
-            
-            segment = {
-                order: order_count,
-                fields: []
+            return {
+                type: segmentType,
+                order,
+                fields: segmentType === "MSH"
+                    ? this.processMSH(fields, meta)
+                    : fields.map(field => field.split(meta.componentSeparator)),
             };
-
-            order_count++;
-
-            if (segment_type === "MSH") {
-                segment.fields[0] = ["MSH"];
-                segment.fields[1] = [item.field_seperator];
-                segment.fields[2] = [`${item.component_seperator}${item.repetition_seperator}${item.escape_character}${item.subcomponent_separator}`];
-                fields.shift();
-                fields.shift();
-            }
-
-            fields.forEach(field => {
-                segment.fields.push(field.split(item.component_seperator));
-            })
-
-            item[segment_type] = item[segment_type] ?? [];
-            item[segment_type].push(segment);
         });
 
-        return item;
+        return { ...meta, segments };
     }
-    
-    getSerialized(segment_separator = "\n") {
+
+    // Process MSH fields
+    processMSH(fields, meta) {
+        return [
+            ["MSH"],
+            [meta.fieldSeparator], // MSH.1 is the field separator
+            [`${meta.componentSeparator}${meta.repetitionSeparator}${meta.escapeCharacter}${meta.subcomponentSeparator}`],
+            ...fields.slice(1).map(field => field.split(meta.componentSeparator)), // Start at MSH.3
+        ];
+    }
+
+    // Serialize the HL7 message back into a string
+    serialize(segmentSeparator = "\n") {
         if (!this.message) {
             throw new Error("No message available to serialize.");
         }
-    
-        const { field_seperator, component_seperator, repetition_seperator, escape_character, subcomponent_separator, ...segments } = this.message;
-    
-        const serializeField = (field) => {
-            if (Array.isArray(field)) {
-                return field.map(component => Array.isArray(component) ? component.join(subcomponent_separator) : component).join(component_seperator);
+
+        const {
+            fieldSeparator,
+            componentSeparator,
+            subcomponentSeparator,
+            segments,
+        } = this.message;
+
+        const serializeField = field =>
+            Array.isArray(field)
+                ? field.map(component =>
+                      Array.isArray(component) ? component.join(subcomponentSeparator) : component
+                  ).join(componentSeparator)
+                : field;
+
+        const serializeSegment = ({ type, fields }) => {
+            const serializedFields = [...fields];
+            if (type === "MSH") {
+                serializedFields.splice(1, 2);
             }
-            return field;
+            return serializedFields.map(serializeField).join(fieldSeparator);
         };
-    
-        const serializeSegment = (segmentType, segment) => {
-            let fields = segment.fields.map(serializeField);
-            if (segmentType === "MSH") {
-               // Remove fields[1]
-               fields.splice(1, 1);
-            } 
-            return `${fields.join(field_seperator)}`;
-        };
-    
-        let serializedMessage = Object.entries(segments)
-            .filter(([key]) => key !== "order") // Exclude meta properties like `order`
-            .flatMap(([segmentType, segmentArray]) => 
-                segmentArray.map(segment => serializeSegment(segmentType, segment))
-            )
-            .join(segment_separator);
-    
-        return serializedMessage;
+
+        return segments.map(serializeSegment).join(segmentSeparator);
     }
 
+    // Retrieve segments by type
+    getSegmentsByType(segmentType) {
+        return this.message.segments.filter(segment => segment.type === segmentType);
+    }
+
+    // Retrieve a value based on a dot-separated path
     getValue(path) {
-        const [segmentType, fieldIndex, componentIndex] = path.split(".").map(part => (isNaN(part) ? part : parseInt(part)));
+        const [segmentType, fieldIndex, componentIndex] = path
+            .split(".")
+            .map(part => (isNaN(part) ? part : parseInt(part)));
 
-        if (!this.message[segmentType]) {
-            throw new Error(`Segment "${segmentType}" not found in the message.`);
+        const segments = this.getSegmentsByType(segmentType);
+        if (!segments.length) {
+            throw new Error(`Segment "${segmentType}" not found.`);
         }
-    
-        const results = this.message[segmentType].map(segment => {
-            const field = segment.fields[fieldIndex];
-    
-            if (!field) {
-                return null; // Field not found
-            }
-    
-            if (componentIndex !== undefined) {
-                return field[componentIndex - 1] ?? null; // Return specific component or null if missing
-            }
-    
-            // If no componentIndex, return the entire field as a string
-            return field.join(this.message.component_seperator);
+
+        const values = segments.map(({ fields }) => {
+            const field = fields[fieldIndex];
+            if (!field) return null;
+
+            return componentIndex !== undefined
+                ? field[componentIndex - 1] || null
+                : field.join(this.message.componentSeparator);
         });
-    
-        // Return a single value if there's only one segment, or an array if multiple
-        return results.length === 1 ? results[0] : results;
+
+        return values.length === 1 ? values[0] : values;
     }
 
+    // Set a value at a specific path
     setValue(path, value) {
-        const [segmentType, fieldIndex, componentIndex] = path.split(".").map(part => (isNaN(part) ? part : parseInt(part)));
-    
-        if (!this.message[segmentType]) {
-            throw new Error(`Segment "${segmentType}" not found in the message.`);
+        const [segmentType, fieldIndex, componentIndex] = path
+            .split(".")
+            .map(part => (isNaN(part) ? part : parseInt(part)));
+
+        const segments = this.getSegmentsByType(segmentType);
+        if (!segments.length) {
+            throw new Error(`Segment "${segmentType}" not found.`);
         }
-    
-        const fieldIdx = fieldIndex;
-        const compIdx = componentIndex ? componentIndex - 1 : undefined;
-    
-        this.message[segmentType].forEach(segment => {
-            while (segment.fields.length <= fieldIdx) {
+
+        segments.forEach(segment => {
+            while (segment.fields.length <= fieldIndex) {
                 segment.fields.push([]);
             }
-    
-            const field = segment.fields[fieldIdx];
-    
-            if (compIdx !== undefined) {
-                while (field.length <= compIdx) {
+
+            const field = segment.fields[fieldIndex];
+            if (componentIndex !== undefined) {
+                while (field.length <= componentIndex - 1) {
                     field.push("");
                 }
-                field[compIdx] = value;
+                field[componentIndex - 1] = value;
             } else {
-                segment.fields[fieldIdx] = value.split(this.message.component_seperator);
+                segment.fields[fieldIndex] = value.split(this.message.componentSeparator);
             }
         });
     }
-    
 }
 
-export default hl7_2x;
+export default HL7Parser;
